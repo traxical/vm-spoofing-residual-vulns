@@ -5,7 +5,7 @@ Sanitized audit findings from isolated-lab testing — research and defensive pu
 **Fork of:** [hzqst/VmwareHardenedLoader](https://github.com/hzqst/VmwareHardenedLoader)
 
 ## Purpose
-The purpose of this repo is to document remaining traces of a VM post-spoof. It's intended use is to be used as a template for security research and defensive analysis. This does not cover all possible remaining traces, it focuses on the common, easily identifiable traces that exist post-spoofing when using the upstream repo's guide. All testing was performed in isolated lab environments and no exploit code or PoCs are included. Do not expect any single artifact to be definitive proof of a virtualized environment, but rather a correlated set of signs and indicators that when taken together, strongly suggest the presence of a virtual machine.
+The purpose of this repo is to document remaining traces of a VM post-spoof. It's intended use is to be used as a template for security research and defensive analysis. This does not cover all possible remaining traces, it focuses on the common, easily identifiable traces that exist post-spoofing when using the upstream repo's guide. All testing was performed in isolated lab environments and no exploit code or PoCs are included.
 
 ## Scope
 All testing was done on a Windows 10 22H2 Virtual Machine, following the upstream repository's instructions.
@@ -48,4 +48,22 @@ The low number of HIDs is one of the clearest signs which are not software-based
 Identical, or near identical "Device Started" timestamps across system components hint that devices were initialized simultaneously during the same session, which is a pattern not commonly observed on a real machine, where drivers and devices initialize over time due to software and driver updates, as well as hardware upgrades. This is a **moderate-strength indicator**, as while it is not exclusive to virtual environments, it is a strong context clue when paired with other findings.
 
 ### 3. Driver Provider Mismatch
-The mismatch in driver provider names (such as VMware or unidentified providers appearing where Microsoft or OEMs should) suggests remnant
+The mismatch in driver provider names (such as VMware or unidentified providers appearing where Microsoft or OEMs should) suggests remnant virtualization-related drivers which were not fully hid. All of these inconsistencies presist even after following the spoofing guide just as instructed. **High-confidence indicator** because legitimate computers rarely ever show this combination.
+
+### Virtualization Drivers and CPU Capability Mismatch
+One of the most reliable traces observed is the coexistence of virtualization-related drivers (e.g. `vmgid.sys`, `vmouse.sys`, `vm3dmp.sys`) while the CPU reports it does not support virtualization. This contradiction strongly suggests the system is spoofed rather than being a genuine physical host. Therefore this is a **high-confidence indicator** of a VM post-spoof.
+
+### System Information Artifacts
+A number of entries in System Information (`msinfo32`) still leak virtual machine details such as:
+- BIOS Version or Date fields tend to remain synthetic and/or generic
+- Display Adapter Type can expose VMware or SVGA3D identifiers
+- PNP Device IDs containing `VMW` directly correlate to VMware hardware emulation
+These artifacts are consistent and easily detectable using basic system queries, representing a **high-confidence indicator**.
+
+### Loaded Module Metadata
+The appearance of `virtualmonitormanager.sys` under Loaded Modules, often lacking version and manufacturer metadata, hints towards the presence of a virtual environment. `virtualmonitormanager.sys` is a system file associated with virtualization technology. More specifically, it is a part of the *VMware tools*. This detail is interesting because at no point during the controlled testing was the VMware Tools package installed. This is a **medium-confidence indicator**, but is most effective when paired with other virtualization indicators.
+
+___
+
+# Summary of Findings
+Despite following the upstream repository's instructions, the spoofed VM still exposes detectable traces across a range of different system layers. While no single indicator definitely proves a virtual environment, the **aggregate pattern** makes reliable detection feasible even post-spoof. This shows the limitations of spoofing techniques on the user level against an anti-VM analysis.
