@@ -1,5 +1,4 @@
 # scan-vm-residuals.ps1
-# Rebuilt main logic for VM residual detection
 # Outputs structured results and a final likelihood conclusion.
 # Toggle debug output:
 $global:is_debug = 1  # set to 0 to suppress detailed prints
@@ -401,3 +400,4 @@ if ($vmScore -le 3) {
 Write-Host "`nVirtual Environment Likelihood: $conclusion ($vmScore points)"
 Write-Host "Press any key to exit..."
 [Console]::ReadKey($true) | Out-Null
+
