@@ -32,7 +32,6 @@ function Get-VirtCapabilityStatus {
     }
 }
 
-
 function timing_jitter_check {
     try {
         # ONLY flag if we're VERY confident it's a VM
@@ -92,11 +91,6 @@ function timing_jitter_check {
         return New-CheckResult "Timing Analysis" $false 0 ("Error: " + $_.Exception.Message)
     }
 }
-
-
-
-
-
 
 function mac_address_spoof_check {
     try {
@@ -173,7 +167,6 @@ function mac_address_spoof_check {
             return New-CheckResult "MAC Address Spoof Check" $false 0 $evidence
         }
 
-        # Basic fuzzy match
         $match = $false
         if ($normVendor -like "*$normBaseboard*" -or $normBaseboard -like "*$normVendor*") { $match = $true }
 
@@ -230,18 +223,40 @@ function HID_check {
     }
 }
 
-function SetupAPI_VMW_log_check {
-    # Parse setupapi.dev.log for VMware indicators
+
+function SetupAPI_VM_log_check {
+    # Parse setupapi.dev.log for ALL VM indicators
     $path = "$env:windir\INF\setupapi.dev.log"
     if (-not (Test-Path $path)) {
-        return New-CheckResult "SetupAPI VMware entries" $false 0 "setupapi.dev.log not found"
+        return New-CheckResult "SetupAPI VM entries" $false 0 "setupapi.dev.log not found"
     }
-    $lines = Select-String -Path $path -Pattern "VMW|VMware|vmw" -SimpleMatch -ErrorAction SilentlyContinue
-    $count = if ($lines) { $lines.Count } else { 0 }
-    $evidence = if ($count -gt 0) { $lines | Select-Object -First 20 | ForEach-Object { $_.Line } } else { @() }
+    
+    $vmPatterns = @(
+        "VMW|VMware|vmw",           # VMware
+        "VBOX|VirtualBox|vbox",     # VirtualBox
+        "QEMU|qemu",                # QEMU/KVM
+        "XEN|xen",                  # Xen
+        "VIRTUAL|Virtual"           # Generic virtual
+    )
+    
+    $allMatches = @()
+    foreach ($pattern in $vmPatterns) {
+        $matches = Select-String -Path $path -Pattern $pattern -SimpleMatch -ErrorAction SilentlyContinue
+        if ($matches) {
+            $allMatches += $matches
+        }
+    }
+    
+    $count = $allMatches.Count
+    $evidence = if ($count -gt 0) { 
+        $allMatches | Select-Object -First 20 | ForEach-Object { $_.Line } 
+    } else { 
+        @() 
+    }
+    
     $flag = ($count -gt 0)
     $points = if ($flag) { 2 } else { 0 }
-    return New-CheckResult "SetupAPI VMware entries" $flag $points $evidence
+    return New-CheckResult "SetupAPI VM entries" $flag $points $evidence
 }
 
 function BIOS_version_date_check {
@@ -251,7 +266,9 @@ function BIOS_version_date_check {
         $version = $bios.SMBIOSBIOSVersion
         $release = $bios.ReleaseDate
         $evidence = @{Manufacturer=$manufacturer;Version=$version;ReleaseDate=$release}
-        $flag = ($manufacturer -match "VMware|VirtualBox|Xen|QEMU")
+        
+        # Check for ALL major VM vendors
+        $flag = ($manufacturer -match "VMware|VirtualBox|Xen|QEMU|innotek|Oracle|Parallels|Microsoft Corporation")
         $points = if ($flag) { 4 } else { 0 }
         return New-CheckResult "BIOS vendor/version" $flag $points $evidence
     } catch {
@@ -267,7 +284,8 @@ function display_adapter_type_check {
         # Combine both the Name and VideoProcessor into a single string for searching
         $searchableText = ($gpus | Select-Object -Property @{Name="Text"; Expression={"$($_.Name) $($_.VideoProcessor)"}} | Select-Object -ExpandProperty Text) -join " "
         
-        $flag = ($searchableText -match "VMware|SVGA|Virtual|VBox|VBoxVideo|VMware SVGA|VMware SVGA II")
+        # Check for ALL major VM vendors
+        $flag = ($searchableText -match "VMware|SVGA|Virtual|VBox|VBoxVideo|VMware SVGA|VMware SVGA II|QEMU|Parallels")
         $points = if ($flag) { 3 } else { 0 }
         return New-CheckResult "Display adapter type" $flag $points $evidence
     } catch {
@@ -278,7 +296,9 @@ function display_adapter_type_check {
 function pnp_pointing_device_id_check {
     try {
         # Specifically target devices in the Pointer class, like in System Information
-        $items = Get-PnpDevice -Class Pointer -ErrorAction SilentlyContinue | Where-Object { $_.InstanceId -imatch "VMW|VMWARE|VMCI|QEMU|VirtualBox" }
+        # Check for ALL major VM vendors
+        $items = Get-PnpDevice -Class Pointer -ErrorAction SilentlyContinue | 
+                 Where-Object { $_.InstanceId -imatch "VMW|VMWARE|VMCI|QEMU|VirtualBox|VBOX|Parallels" }
         
         $count = if ($items) { $items.Count } else { 0 }
         $evidence = if ($items) { $items | Select-Object -First 20 FriendlyName,InstanceId,Class,Status } else { @() }
@@ -311,8 +331,18 @@ function suspicious_vm_drivers_check {
     try {
         $virtStatus = Get-VirtCapabilityStatus
         $vmDrivers = Get-ChildItem -Path "$env:windir\system32\drivers" -Filter "vm*.sys" -ErrorAction SilentlyContinue
-        $count = if ($vmDrivers) { $vmDrivers.Count } else { 0 }
-        $evidence = @{VirtStatus=$virtStatus;Drivers = ($vmDrivers | Select-Object Name,LastWriteTime) }
+        
+        # Also check for other VM driver patterns
+        $vboxDrivers = Get-ChildItem -Path "$env:windir\system32\drivers" -Filter "VBox*.sys" -ErrorAction SilentlyContinue
+        $qemuDrivers = Get-ChildItem -Path "$env:windir\system32\drivers" -Filter "*qemu*.sys" -ErrorAction SilentlyContinue
+        
+        $allDrivers = @()
+        if ($vmDrivers) { $allDrivers += $vmDrivers }
+        if ($vboxDrivers) { $allDrivers += $vboxDrivers }
+        if ($qemuDrivers) { $allDrivers += $qemuDrivers }
+        
+        $count = $allDrivers.Count
+        $evidence = @{VirtStatus=$virtStatus;Drivers = ($allDrivers | Select-Object Name,LastWriteTime) }
         $flag = ($virtStatus -eq "Disabled" -and $count -gt 0)
         $points = if ($flag) { 3 } else { 0 }
         return New-CheckResult "VM drivers present while virtualization disabled" $flag $points $evidence
@@ -327,7 +357,7 @@ $results = @()
 # List of all checks to run
 $checkFunctions = @(
     { HID_check },
-    { SetupAPI_VMW_log_check },
+    { SetupAPI_VM_log_check },      # Updated name
     { BIOS_version_date_check },
     { display_adapter_type_check },
     { pnp_pointing_device_id_check },
@@ -337,18 +367,11 @@ $checkFunctions = @(
     { timing_jitter_check }
 )
 
-
 foreach ($checkFunction in $checkFunctions) {
-
     $resultObject = & $checkFunction
-
-
     $vmScore += $resultObject.Points
-
-
     $results += $resultObject
 }
-
 
 if ($global:is_debug -eq 1) {
     Write-Host "`n=== Detailed Check Results ===`n"
@@ -380,7 +403,6 @@ if ($global:is_debug -eq 1) {
     }
 }
 
-
 if ($vmScore -le 3) {
     $conclusion = "Minimal"
 } elseif ($vmScore -le 6) {
@@ -400,4 +422,3 @@ if ($vmScore -le 3) {
 Write-Host "`nVirtual Environment Likelihood: $conclusion ($vmScore points)"
 Write-Host "Press any key to exit..."
 [Console]::ReadKey($true) | Out-Null
-
