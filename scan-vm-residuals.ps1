@@ -37,7 +37,6 @@ function Get-VirtCapabilityStatus {
 function timing_jitter_check {
     try {
         # ONLY flag if we're VERY confident it's a VM
-        # Physical hardware should almost never trigger this
         
         $extremelySuspiciousPatterns = 0
         
@@ -102,7 +101,6 @@ function timing_jitter_check {
 
 function mac_address_spoof_check {
     try {
-        # Known virtual OUIs (definite VM indicators)
         $virtualOuis = @(
             "00:0C:29","00:1C:14","00:05:69","00:50:56", # VMware
             "08:00:27",                                   # VirtualBox
@@ -154,9 +152,9 @@ function mac_address_spoof_check {
         # Helper: normalize strings
         function NormalizeVendorString($s) {
             if (-not $s) { return "" }
-            $n = $s -replace '[\p{P}\p{S}]','' # remove punctuation/symbols
+            $n = $s -replace '[\p{P}\p{S}]',''
             $n = $n -replace '\s+(incorporation|inc|ltd|co|corporation|corp|limited)$',''
-            $n = $n -replace '\s+','' # remove spaces
+            $n = $n -replace '\s+','' 
             return $n.ToLower()
         }
 
@@ -289,7 +287,6 @@ function pnp_pointing_device_id_check {
         $flag = ($count -gt 0)
         $points = if ($flag) { 4 } else { 0 }
         
-        # I've also updated the name of the check to be more accurate
         return New-CheckResult "PNP Pointing Device ID contains VM indicator" $flag $points $evidence
     } catch {
         return New-CheckResult "PNP Pointing Device ID contains VM indicator" $false 0 "error:$($_.Exception.Message)"
@@ -341,19 +338,19 @@ $checkFunctions = @(
     { timing_jitter_check }
 )
 
-# Run each check and process the results
+
 foreach ($checkFunction in $checkFunctions) {
-    # Execute the function and get the result object
+
     $resultObject = & $checkFunction
 
-    # Add the points from the object to the total score
+
     $vmScore += $resultObject.Points
 
-    # Add the result object to our results array for the final report
+
     $results += $resultObject
 }
 
-# --- Debug output (No changes needed here, it works with the fixed logic) ---
+
 if ($global:is_debug -eq 1) {
     Write-Host "`n=== Detailed Check Results ===`n"
     $results | ForEach-Object {
@@ -384,7 +381,7 @@ if ($global:is_debug -eq 1) {
     }
 }
 
-# Assign conclusion
+
 if ($vmScore -le 3) {
     $conclusion = "Minimal"
 } elseif ($vmScore -le 6) {
