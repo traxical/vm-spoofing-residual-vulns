@@ -63,7 +63,21 @@ These artifacts are consistent and easily detectable using basic system queries,
 ### Loaded Module Metadata
 The appearance of `virtualmonitormanager.sys` under Loaded Modules, often lacking version and manufacturer metadata, hints towards the presence of a virtual environment. `virtualmonitormanager.sys` is a system file associated with virtualization technology. More specifically, it is a part of the *VMware tools*. This detail is interesting because at no point during the controlled testing was the VMware Tools package installed. This is a **medium-confidence indicator**, but is most effective when paired with other virtualization indicators.
 
-___
+
+____
 
 # Summary of Findings
 Despite following the upstream repository's instructions, the spoofed VM still exposes detectable traces across a range of different system layers. While no single indicator definitely proves a virtual environment, the **aggregate pattern** makes reliable detection feasible even post-spoof. This shows the limitations of spoofing techniques on the user level against an anti-VM analysis.
+
+
+# Next Steps
+I have included a Powershell script that attempts to detect residual indicators and signs of virtualization on a system that has undergone VM spoofing. The purpose of this script is to help identify artifacts and inconsistencies that may reveal the presence of a virtualized environment even after obfuscation techniques. The script performs a number of layered checks including:
+- Hardware and device enumeration (i.e. HIDs)
+- BIOS and firmware validation, checkiing for known strings of virtualization vendors such as `VMware` or `VirtualBox`
+- Driver and log analysis, searching for virtualization related drivers while the CPU is stated to be incapable of virtualization (e.g. `vm*.sys`) and entries in `setupapi.dev.log`.
+- Monitor and video controllers, identifying generic or missing monitor metadata often found in virtual machines.
+- CPU virtualization capability cross checked with suspicious drivers.
+- Timing Checks (can be prone to false flags)
+
+At the top of the script, you can toggle debug mode on or off (1 or 0). If on, it will display the results of each test. If off, it will simply only dispay the final score and virtual environment risk.
+
