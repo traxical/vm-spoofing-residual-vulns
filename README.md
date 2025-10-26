@@ -1,7 +1,7 @@
 # VMwareHardenedLoader residual vulnerabilities
 
 ## About & Credit
-Sanitized audit findings from isolated-lab testing — research and defensive purposes only. No PoCs.
+Sanitized audit findings from isolated-lab testing — research and defensive purposes only.
 **Fork of:** [hzqst/VmwareHardenedLoader](https://github.com/hzqst/VmwareHardenedLoader)
 
 ## Purpose
